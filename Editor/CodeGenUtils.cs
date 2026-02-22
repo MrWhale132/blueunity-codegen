@@ -97,6 +97,7 @@ namespace Assets._Project.Scripts.UtilScripts.CodeGen
                 return null;
             }
 
+
             var assembly = AppDomain.CurrentDomain.GetAssemblies()
                 .FirstOrDefault(a => a.GetName().Name == assemblyName);
 
@@ -194,6 +195,7 @@ namespace Assets._Project.Scripts.UtilScripts.CodeGen
 
 
 
+
         public static List<Type> GetAllTypes()
         {
             var assemblies = AppDomain.CurrentDomain
@@ -206,12 +208,6 @@ namespace Assets._Project.Scripts.UtilScripts.CodeGen
 
             assemblies = assemblies.OrderBy(a => a.Item2);
 
-            using var writer = File.CreateText("C:/temp/assemblies.txt");
-
-            foreach (var asm in assemblies)
-            {
-                writer.WriteLine($"{asm.Item2}\t{asm.Item1}");
-            }
 
             var allTypes = AppDomain.CurrentDomain
                 .GetAssemblies()
@@ -760,7 +756,7 @@ namespace Assets._Project.Scripts.UtilScripts.CodeGen
 
 
 
-
+            //duplicated logic id: jisdfdsf76isajhd3243
             string GetTypeExpr(Type t)
             {
                 if (t.HasElementType)
@@ -799,7 +795,7 @@ namespace Assets._Project.Scripts.UtilScripts.CodeGen
 
 
 
-        public static string InsertNestedTypeIntoClass(
+        public static string InsertNestedTypeIntoTargetType(
             Type targetType,
             string targetFileContent,
             string generatedSourceCode)
@@ -814,7 +810,9 @@ namespace Assets._Project.Scripts.UtilScripts.CodeGen
                 className += GetGenericParameterListText(targetType);
             }
 
-            var classDeclRegex = new Regex(@"\bclass\s+" + Regex.Escape(className));
+            string structureType = targetType.IsClass ? "class" : "struct";
+
+            var classDeclRegex = new Regex(@$"\b{structureType}\s+" + Regex.Escape(className));
             var match = classDeclRegex.Match(targetFileContent);
 
             if (!match.Success)
@@ -824,7 +822,7 @@ namespace Assets._Project.Scripts.UtilScripts.CodeGen
             int searchStart = match.Index + match.Length;
             int openingBrace = targetFileContent.IndexOf('{', searchStart);
             if (openingBrace < 0)
-                throw new InvalidOperationException("Could not find opening brace of class.");
+                throw new InvalidOperationException("Could not find opening brace of type.");
 
             // 3. Find the matching closing brace using a brace counter
             int pos = openingBrace + 1;
@@ -838,9 +836,9 @@ namespace Assets._Project.Scripts.UtilScripts.CodeGen
             }
 
             if (depth != 0)
-                throw new InvalidOperationException("Class braces seem unbalanced.");
+                throw new InvalidOperationException("Type braces seem unbalanced.");
 
-            int closingBrace = pos - 1; // position of the class’s final '}'
+            int closingBrace = pos - 1; // position of the type’s final '}'
 
             // 4. Insert generated code before the closing brace.
             // Optional: indent the generated code by one level.
@@ -849,9 +847,9 @@ namespace Assets._Project.Scripts.UtilScripts.CodeGen
                 Environment.NewLine + indent + generatedSourceCode.Replace(Environment.NewLine, Environment.NewLine + indent) + Environment.NewLine;
 
             string result =
-                targetFileContent.Substring(0, closingBrace) +
+                targetFileContent[..closingBrace] +
                 indentedGenerated +
-                targetFileContent.Substring(closingBrace);
+                targetFileContent[closingBrace..];
 
             return result;
         }
@@ -972,6 +970,10 @@ namespace Assets._Project.Scripts.UtilScripts.CodeGen
 
             foreach (var prop in propInfos)
             {
+                if(prop.Name == "useAutoRandomSeed")
+                {
+
+                }
                 var propDef = propDefByNameLookUp[prop.Name];
 
                 if (propDef == null) continue;
@@ -1591,6 +1593,8 @@ namespace Assets._Project.Scripts.UtilScripts.CodeGen
         }
         public static bool IsExtern(this MethodInfo m)
         {
+            var body = m?.GetMethodBody();
+
             return m != null &&
                    !m.IsAbstract &&
                    m.GetMethodBody() == null;

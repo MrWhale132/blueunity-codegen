@@ -4,15 +4,43 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using UnityEngine;
+using Assembly = System.Reflection.Assembly;
 
 #if UNITY_EDITOR
 using UnityEditor;
+using UnityEditor.Compilation;
 #endif
 
 
 public static class AssemblyResolver
 {
 #if UNITY_EDITOR
+
+
+    public static HashSet<string> GetAsmdefReferences(System.Reflection.Assembly targetAssembly)
+    {
+        var result = new HashSet<string>();
+
+        var unityAssemblies = CompilationPipeline.GetAssemblies();
+
+        var target = unityAssemblies.FirstOrDefault(a =>
+            a.name == targetAssembly.GetName().Name);
+
+        if (target == null)
+            return result;
+
+        foreach (var reference in target.assemblyReferences)
+        {
+            var name = reference.name;
+            result.Add(name);
+        }
+
+        return result;
+    }
+
+
+
+
     /// <summary>
     /// Resolves which assembly a given C# file belongs to.
     /// </summary>
@@ -20,6 +48,19 @@ public static class AssemblyResolver
     /// <returns>Name of the assembly (e.g. "Assembly-CSharp")</returns>
     public static string ResolveAssembly(string csFilePath)
     {
+        //doesnt work somewhy
+        //string assemblyName = CompilationPipeline.GetAssemblyNameFromScriptPath(csFilePath);
+
+        //if (string.IsNullOrEmpty(assemblyName))
+        //{
+        //    return "Assembly-CSharp";
+        //}
+        //else
+        //{
+        //    return assemblyName;
+        //}
+
+
         if (!File.Exists(csFilePath) || Path.GetExtension(csFilePath) != ".cs")
         {
             Debug.LogError($"Not a valid C# file: {csFilePath}");
@@ -33,14 +74,25 @@ public static class AssemblyResolver
         {
             // 1. Check for .asmdef
             var asmdefFiles = Directory.GetFiles(dir, "*.asmdef", SearchOption.TopDirectoryOnly);
+
+            if (asmdefFiles.Length > 1)
+            {
+                Debug.LogError($"Multiple .asmdef files found in directory {dir}. Will use the first one.");
+            }
+            
             if (asmdefFiles.Length > 0)
             {
-                //todo: how is this even working? The .asmdef's file name may not match the assembly name inside it.
-                return Path.GetFileNameWithoutExtension(asmdefFiles[0]);
+                return GetAssemblyNameFromAsmDef(asmdefFiles[0]);
             }
 
             // 2. Check for .asmref
             var asmrefFiles = Directory.GetFiles(dir, "*.asmref", SearchOption.TopDirectoryOnly);
+
+            if(asmdefFiles.Length > 1)
+            {
+                Debug.LogError($"Multiple .asmref files found in directory {dir}. Will use the first one.");
+            }
+
             if (asmrefFiles.Length > 0)
             {
                 return GetAssemblyNameFromAsmRef(asmrefFiles[0]);
@@ -57,6 +109,30 @@ public static class AssemblyResolver
             return "Assembly-CSharp";
     }
 
+
+
+
+    public static string GetAssemblyNameFromAsmDef(string filePath)
+    {
+        if (string.IsNullOrEmpty(filePath))
+        {
+
+            Debug.LogError("Asmdef file path is null or empty.");
+            return null;
+        } 
+        if (!File.Exists(filePath))
+        {
+            Debug.LogError($"Asmdef file does not exist: {filePath}");
+            return null;
+        }
+
+
+
+        string asmdefJson = File.ReadAllText(filePath);
+        var asmdefData = JsonUtility.FromJson<AsmDefJson>(asmdefJson);
+
+        return asmdefData.name;
+    }
 
 
     public static string GetAssemblyNameFromAsmRef(string filePath)
@@ -126,7 +202,7 @@ public static class AssemblyResolver
                 Debug.LogWarning($"Directory does not exist: {fullDirPath}. Skipping.");
                 continue;
             }
-
+            
             var asmRefPaths = Directory.GetFiles(fullDirPath, "*.asmref", SearchOption.AllDirectories);
 
             var byName = new Dictionary<string, List<string>>();
@@ -179,6 +255,10 @@ public static class AssemblyResolver
 
     public static string[] EditableSourceFilesDirs = new string[] { "Assets", "Packages" };
 
+    public static AsdmDefInfo GetAsdmDefInfoInDirs(Assembly assembly)
+    {
+        return GetAsdmDefInfoInDirs(assembly, EditableSourceFilesDirs);
+    }
     public static AsdmDefInfo GetAsdmDefInfoInDirs(Assembly assembly, params string[] directories)
     {
         var infos = GetAsdmDefInfosInDirs(directories);
