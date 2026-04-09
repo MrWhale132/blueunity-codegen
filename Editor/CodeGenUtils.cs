@@ -3,6 +3,7 @@
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 #endif
+using Theblueway.Core.Runtime.Extensions;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -11,6 +12,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.RegularExpressions;
+using Theblueway.CodeGen.Runtime;
 using UnityEngine;
 using UnityEngine.Events;
 using GenericParameterAttributes = System.Reflection.GenericParameterAttributes;
@@ -223,145 +225,7 @@ namespace Assets._Project.Scripts.UtilScripts.CodeGen
 
 
 
-        public static string GetMethodSignature(MethodInfo method, bool useNameOfOperator = false)
-        {
-            var genericArity = method.IsGenericMethodDefinition
-                ? "<" + string.Join(",", method.GetGenericArguments().Select(a => useNameOfOperator ? $"{{nameof({a.Name})}}" : a.Name)) + ">"
-                : "";
 
-            var parameters = string.Join(",",
-                method.GetParameters()
-                      .Select(p => ToSignatureTypeName(p.ParameterType, useNameOfOperator)));
-
-            var returnType = ToSignatureTypeName(method.ReturnType, useNameOfOperator);
-
-            string methodName = useNameOfOperator ? $"{{nameof({CodeGenUtils.ToTypeReferenceText(method.DeclaringType, withNameSpace: true)}.{method.Name})}}" : method.Name;
-
-            return $"{methodName}{genericArity}({parameters}):{returnType}";
-        }
-
-        private static string ToSignatureTypeName(Type type, bool useNameOfOperator)
-        {
-            if (type == typeof(void)) useNameOfOperator = false;
-
-            // Handle generic type parameter (T, U, etc.)
-            if (type.IsGenericParameter)
-                return useNameOfOperator ? $"{{nameof({type.Name})}}" : type.Name;
-
-            // Handle byref (ref/in/out)
-            if (type.IsByRef)
-                return ToSignatureTypeName(type.GetElementType()!, useNameOfOperator) + "&";
-
-            // Handle pointers
-            if (type.IsPointer)
-                return ToSignatureTypeName(type.GetElementType()!, useNameOfOperator) + "*";
-
-            // Handle arrays
-            if (type.IsArray)
-                return ToSignatureTypeName(type.GetElementType()!, useNameOfOperator) + "[" + new string(',', type.GetArrayRank() - 1) + "]";
-
-            // Handle constructed generic types
-            if (type.IsGenericType)
-            {
-                var defName = type.GetGenericTypeDefinition().FullName!;
-                defName = defName.Substring(0, defName.IndexOf('`')); // strip arity
-                defName = useNameOfOperator ? $"{type.Namespace}.{{nameof({CodeGenUtils.ToTypeReferenceText(type, withNameSpace: true)})}}" : defName;
-
-                var args = type.GetGenericArguments().Select(type => ToSignatureTypeName(type, useNameOfOperator));
-
-                return $"{type.Assembly.GetName().Name} {defName}<{string.Join(",", args)}>";
-            }
-
-            // Fallback: fully qualified name for non-generic, non-parameter types
-            string typeName = useNameOfOperator ? $"{type.Namespace}.{{nameof({CodeGenUtils.ToTypeReferenceText(type, withNameSpace: true)})}}" : type.FullName ?? type.Name;
-
-            return $"{type.Assembly.GetName().Name} {typeName}";
-        }
-
-
-
-
-        public static IEnumerable<(MethodInfo method, object target)> GetRuntimeDelegatesFromUnityEvent(UnityEventBase unityEvent)
-        {
-            return GetRuntimeDelegatesFromUnityEvent(unityEvent, Array.Empty<Type>());
-        }
-        public static IEnumerable<(MethodInfo method, object target)> GetRuntimeDelegatesFromUnityEvent<T0>(UnityEventBase unityEvent)
-        {
-            return GetRuntimeDelegatesFromUnityEvent(unityEvent, new Type[] { typeof(T0) });
-        }
-        public static IEnumerable<(MethodInfo method, object target)> GetRuntimeDelegatesFromUnityEvent<T0, T1>(UnityEventBase unityEvent)
-        {
-            return GetRuntimeDelegatesFromUnityEvent(unityEvent, new Type[] { typeof(T0), typeof(T1) });
-        }
-        public static IEnumerable<(MethodInfo method, object target)> GetRuntimeDelegatesFromUnityEvent<T0, T1, T2>(UnityEventBase unityEvent)
-        {
-            return GetRuntimeDelegatesFromUnityEvent(unityEvent, new Type[] { typeof(T0), typeof(T1), typeof(T2) });
-        }
-        public static IEnumerable<(MethodInfo method, object target)> GetRuntimeDelegatesFromUnityEvent<T0, T1, T2, T3>(UnityEventBase unityEvent)
-        {
-            return GetRuntimeDelegatesFromUnityEvent(unityEvent, new Type[] { typeof(T0), typeof(T1), typeof(T2), typeof(T3) });
-        }
-
-        public static IEnumerable<(MethodInfo method, object target)> GetRuntimeDelegatesFromUnityEvent(UnityEventBase unityEvent, Type[] argTypes)
-        {
-            var delegates = new List<(MethodInfo method, object target)>();
-
-
-            ///persistent listeners have fixed arguments and a <see cref="PersistentListenerMode"/>
-            ///since during runtime you cant add persisten listeners you cant restore them to how they was set in the inspector originally
-            ///thus, for now, I will just say that persistent listeners are not supported.
-            ///we lose these persistent calls because we add components with <see cref="Component.GetComponent{T}"/>
-            ///and not instantiating them via prefabs, which would have them.
-
-
-            // 1. Persistent (Inspector) listeners
-            //for (int i = 0; i < unityEvent.GetPersistentEventCount(); i++)
-            //{
-            //    var target = unityEvent.GetPersistentTarget(i);
-            //    var methodName = unityEvent.GetPersistentMethodName(i);
-
-            //    //though target can be null for statics, they can not be used in inspector
-            //    if (target != null && !string.IsNullOrEmpty(methodName))
-            //    {
-            //        var methodInfo = UnityEventBase.GetValidMethodInfo(target, methodName, argTypes);
-
-            //        if (methodInfo != null)
-            //        {
-            //            //Debug.Log("method found: "+methodInfo.Name);
-            //            delegates.Add((methodInfo, target));
-            //        }
-            //    }
-            //}
-
-            // 2.
-            var callsField = typeof(UnityEventBase).GetField("m_Calls",
-                BindingFlags.Instance | BindingFlags.NonPublic);
-            var invokableCallList = callsField.GetValue(unityEvent);
-
-            //GetDelegatesFromCallList("m_PersistentCalls");
-            GetDelegatesFromCallList("m_RuntimeCalls");
-
-            return delegates;
-
-
-            void GetDelegatesFromCallList(string fieldName)
-            {
-                var runtimeCallsField = invokableCallList.GetType().GetField(fieldName,
-                BindingFlags.Instance | BindingFlags.NonPublic);
-                var runtimeCalls = runtimeCallsField.GetValue(invokableCallList) as System.Collections.IList;
-
-                foreach (var invokable in runtimeCalls)
-                {
-                    var delegateField = invokable.GetType().GetField("Delegate",
-                        BindingFlags.Instance | BindingFlags.NonPublic);
-                    if (delegateField != null)
-                    {
-                        if (delegateField.GetValue(invokable) is Delegate del)
-                            delegates.Add((del.Method, del.Target));
-                    }
-                }
-            }
-        }
 
 
 
@@ -508,187 +372,6 @@ namespace Assets._Project.Scripts.UtilScripts.CodeGen
 
 
 
-        /// <summary>
-        /// Returns a string suitable for use inside typeof(...).
-        /// Example: (Outer.OuterGen<>.Innner.InnerGen<,>)
-        /// </summary>
-        public static string ToTypeDefinitionText(Type type, bool withNameSpace = false)
-        {
-            if (type == null) throw new ArgumentNullException(nameof(type));
-
-            var sb = new StringBuilder();
-
-            // optionally include namespace (kept from earlier versions)
-            if (withNameSpace && !string.IsNullOrEmpty(type.Namespace))
-            {
-                sb.Append(type.Namespace);
-                sb.Append(".");
-            }
-
-            var chain = GetDeclaringChain(type);
-
-            for (int i = 0; i < chain.Count; i++)
-            {
-                var t = chain[i];
-                var baseName = StripGenericTick(t.Name);
-                sb.Append(baseName);
-
-                int ownArity = GetOwnGenericArityFromName(t.Name);
-                if (ownArity > 0)
-                {
-                    sb.Append("<");
-                    sb.Append(new string(',', ownArity - 1)); // "<,>" for arity 2 etc.
-                    sb.Append(">");
-                }
-
-                if (i < chain.Count - 1) sb.Append(".");
-            }
-
-            AddBracketsIfArray(sb, type);
-
-            return sb.ToString();
-        }
-
-
-        /// <summary>
-        /// Returns a string suitable for using as a type expression with generic parameter placeholders:
-        /// Example: Outer.OuterGen<T>.Innner.InnerGen<U, V>
-        /// </summary>
-        public static string ToTypeReferenceText(Type type, bool withNameSpace = false)
-        {
-            if (type == null) throw new ArgumentNullException(nameof(type));
-
-            if (type.IsGenericParameter)
-                return type.Name ?? type.FullName;
-
-
-            var sb = new StringBuilder();
-
-            if (withNameSpace && !string.IsNullOrEmpty(type.Namespace))
-            {
-                sb.Append(type.Namespace);
-                sb.Append(".");
-            }
-
-            var chain = GetDeclaringChain(type);
-
-            int argIndex = 0;
-            var args = type.RealGetGenericArguments();
-
-            for (int i = 0; i < chain.Count; i++)
-            {
-                var t = chain[i];
-                var baseName = StripGenericTick(t.Name);
-                sb.Append(baseName);
-
-                int ownArity = GetOwnGenericArityFromName(t.Name);
-                if (ownArity > 0)
-                {
-                    sb.Append("<");
-                    var names = new string[ownArity];
-                    for (int j = 0; j < ownArity; j++)
-                    {
-                        if (argIndex > args.Length - 1)
-                        {
-                            Debug.Log(type.CleanAssemblyQualifiedName() ?? type.Name ?? type.FullName ?? type.AssemblyQualifiedName);
-                            _debug = true;
-                            Debug.Log(GetOwnGenericArityFromName(t.Name));
-                            Debug.Log(ownArity);
-                            Debug.Log(args.Length);
-                            Debug.Log(type.IsGenericType);
-                            Debug.Log(type.GenericTypeArguments.Length);
-                            throw new ArgumentException("index");
-                        }
-
-                        var arg = args[argIndex++];
-                        names[j] = ToTypeReferenceText(arg, withNameSpace: true);
-                    }
-                    sb.Append(string.Join(", ", names));
-                    sb.Append(">");
-                }
-
-                if (i < chain.Count - 1) sb.Append(".");
-            }
-
-            AddBracketsIfArray(sb, type);
-
-            return sb.ToString();
-        }
-
-        // ---------------- helpers ----------------
-
-        // returns nested chain from outermost -> given type
-
-        public static void AddBracketsIfArray(StringBuilder sb, Type type)
-        {
-
-            while (type.HasElementType)
-            {
-                if (type.IsArray)
-                {
-                    sb.Append("[");
-                    sb.Append(new string(',', type.GetArrayRank() - 1));
-                    sb.Append("]");
-
-                    type = type.GetElementType()!;
-                }
-            }
-
-        }
-
-
-        private static List<Type> GetDeclaringChain(Type t)
-        {
-            while (t.HasElementType) t = t.GetElementType();
-
-            if (t.IsGenericParameter) return new List<Type>() { t };
-
-            var list = new List<Type>();
-            for (Type cur = t; cur != null; cur = cur.DeclaringType)
-                list.Insert(0, cur);
-            return list;
-        }
-
-        // Name might be "Inner`2" or "SimpleName"
-        private static string StripGenericTick(string name)
-        {
-            int idx = name.IndexOf('`');
-            return idx >= 0 ? name.Substring(0, idx) : name;
-        }
-
-        // parse the integer after the backtick in the Type.Name, e.g. "Inner`2" -> 2
-        private static int GetOwnGenericArityFromName(string name)
-        {
-            if (string.IsNullOrEmpty(name))
-                return 0;
-
-            // 1. Strip by-ref (&) and pointer (*) suffixes
-            while (name.EndsWith("&") || name.EndsWith("*"))
-                name = name.Substring(0, name.Length - 1);
-
-            // 2. Strip array suffixes ([] [,] [,,] ...)
-            // Arrays always start with '[' and end with ']'
-            while (name.EndsWith("]"))
-            {
-                int idx = name.LastIndexOf('[');
-                if (idx < 0) break;
-                name = name.Substring(0, idx);
-            }
-
-            if (_debug) Debug.Log(name);
-
-            // 3. Look for the `n arity marker
-            int backtick = name.IndexOf('`');
-            if (backtick < 0)
-                return 0;
-
-            var numPart = name.Substring(backtick + 1);
-            return int.TryParse(numPart, out int n) ? n : 0;
-        }
-
-
-
-
 
 
         /// <summary>
@@ -734,14 +417,14 @@ namespace Assets._Project.Scripts.UtilScripts.CodeGen
         public static string GenerateGetMethodCode(MethodInfo method, bool withNameSpace = true)
         {
             var declaringType = method.DeclaringType!;
-            string typeExpr = ToTypeDefinitionText(declaringType, withNameSpace);
+            string typeExpr = TypeUtils.ToTypeDefinitionText(declaringType, withNameSpace);
 
             //todo:simplify this
             string flags = "BindingFlags.Public | BindingFlags.Instance";
             if (method.IsStatic) flags = "BindingFlags.Public | BindingFlags.Static";
             if (!method.IsPublic) flags = "BindingFlags.NonPublic | " + (method.IsStatic ? "BindingFlags.Static" : "BindingFlags.Instance");
 
-            string methodNameExpr = $"nameof({ToTypeReferenceText(declaringType, withNameSpace)}.{method.Name})";
+            string methodNameExpr = $"nameof({TypeUtils.ToTypeReferenceText(declaringType, withNameSpace)}.{method.Name})";
 
             // Build parameter type expressions
             var paramExprs = method.GetParameters()
@@ -773,7 +456,7 @@ namespace Assets._Project.Scripts.UtilScripts.CodeGen
                     var def = t.GetGenericTypeDefinition();
                     var genericArgs = t.GetGenericArguments().Select(GetTypeExpr).ToArray();
 
-                    return $"typeof({ToTypeDefinitionText(def, withNameSpace)}).MakeGenericType({string.Join(", ", genericArgs)})";
+                    return $"typeof({TypeUtils.ToTypeDefinitionText(def, withNameSpace)}).MakeGenericType({string.Join(", ", genericArgs)})";
                 }
 
                 if (t.IsGenericParameter)
@@ -786,7 +469,7 @@ namespace Assets._Project.Scripts.UtilScripts.CodeGen
                 }
 
 
-                return $"typeof({ToTypeDefinitionText(t, withNameSpace)})";
+                return $"typeof({TypeUtils.ToTypeDefinitionText(t, withNameSpace)})";
             }
         }
 
@@ -794,11 +477,18 @@ namespace Assets._Project.Scripts.UtilScripts.CodeGen
 
 
 
+        public static (int start, int end) FindTypeDeclarationStartAndEndLineIndexInFile(Type targetType, string targetFileContent)
+        {
+            var (startPos, endPos) = FindTypeDeclarationStartAndEndPositionInFile(targetType, targetFileContent);
 
-        public static string InsertNestedTypeIntoTargetType(
-            Type targetType,
-            string targetFileContent,
-            string generatedSourceCode)
+            int startLine = targetFileContent.Take(startPos).Count(c => c == '\n');
+            int endLine = targetFileContent.Take(endPos).Count(c => c == '\n');
+
+            return (startLine, endLine);
+        }
+
+
+        public static (int start, int end) FindTypeDeclarationStartAndEndPositionInFile(Type targetType, string targetFileContent)
         {
             // 1. Find the class declaration line
             //todo: need to prepare this for generics, comments, and strings
@@ -840,9 +530,21 @@ namespace Assets._Project.Scripts.UtilScripts.CodeGen
 
             int closingBrace = pos - 1; // position of the type’s final '}'
 
+            return (match.Index, closingBrace);
+        }
+
+
+
+        public static string InsertNestedTypeIntoTargetType(
+            Type targetType,
+            string targetFileContent,
+            string generatedSourceCode)
+        {
+            var (start, closingBrace) = FindTypeDeclarationStartAndEndPositionInFile(targetType, targetFileContent);
+
             // 4. Insert generated code before the closing brace.
             // Optional: indent the generated code by one level.
-            string indent = DetectIndentation(targetFileContent, match.Index);
+            string indent = DetectIndentation(targetFileContent, start);
             string indentedGenerated =
                 Environment.NewLine + indent + generatedSourceCode.Replace(Environment.NewLine, Environment.NewLine + indent) + Environment.NewLine;
 
@@ -1116,53 +818,6 @@ namespace Assets._Project.Scripts.UtilScripts.CodeGen
         }
 
 
-        private static bool IsWrapperProperty_Old(PropertyDefinition propDef)
-        {
-            var getter = propDef.GetMethod;
-            var setter = propDef.SetMethod;
-            FieldReference backingField = null;
-
-            if (getter != null && getter.HasBody && getter.IsPublic)
-            {
-                if (propDef.Name == "onCullStateChanged")
-                {
-                    var opcodes = getter.Body.Instructions.Select(OpCode => OpCode.OpCode.Code.ToString());
-                    var list = string.Join("\n", opcodes);
-                    Debug.Log(list);
-                }
-                var instrs = getter.Body.Instructions;
-                if (instrs.Count == 3 &&
-                    instrs[0].OpCode == OpCodes.Ldarg_0 &&
-                    instrs[1].OpCode == OpCodes.Ldfld &&
-                    instrs[2].OpCode == OpCodes.Ret)
-                {
-                    backingField = (FieldReference)instrs[1].Operand;
-                }
-                else return false;
-            }
-            else return false;
-
-            if (setter != null && setter.HasBody && setter.IsPublic)
-            {
-                var instrs = setter.Body.Instructions;
-                if (instrs.Count == 4 &&
-                    instrs[0].OpCode == OpCodes.Ldarg_0 &&
-                    instrs[1].OpCode == OpCodes.Ldarg_1 &&
-                    instrs[2].OpCode == OpCodes.Stfld &&
-                    instrs[3].OpCode == OpCodes.Ret)
-                {
-                    if (backingField != null && instrs[2].Operand != backingField)
-                        return false; // getter/setter mismatch
-                }
-                else return false;
-            }
-            else return false;
-
-            return true;
-        }
-
-
-
 
 
 
@@ -1431,23 +1086,6 @@ namespace Assets._Project.Scripts.UtilScripts.CodeGen
         public static TypeDefinition d_currentTypeDef;
 
 
-        //static IEnumerable<TypeDefinition> GetAllTypes(ModuleDefinition module)
-        //{
-        //    foreach (var t in module.Types)
-        //    {
-        //        foreach (var nested in FlattenType(t))
-        //            yield return nested;
-        //    }
-        //}
-
-        //static IEnumerable<TypeDefinition> FlattenType(TypeDefinition type)
-        //{
-        //    yield return type;
-        //    foreach (var nt in type.NestedTypes)
-        //        foreach (var deeper in FlattenType(nt))
-        //            yield return deeper;
-        //}
-
         static bool IsMethodReferenceStatic(MethodReference methodRef)
         {
             // Preferred: resolve to definition to get definitive IsStatic.
@@ -1600,40 +1238,7 @@ namespace Assets._Project.Scripts.UtilScripts.CodeGen
                    m.GetMethodBody() == null;
         }
 
-        public static bool IsStruct(this Type type)
-        {
-            return type.IsValueType && !type.IsPrimitive && !type.IsEnum;
-        }
 
-        public static bool IsStatic(this Type type)
-        {
-            return type.IsAbstract && type.IsSealed;
-        }
-
-        public static bool IsStatic(this PropertyInfo property)
-        {
-            if (property == null) throw new ArgumentNullException(nameof(property));
-
-            var accessor = property.GetMethod ?? property.SetMethod;
-            return accessor != null && accessor.IsStatic;
-        }
-        public static bool IsStatic(this EventInfo evt)
-        {
-            if (evt == null) throw new ArgumentNullException(nameof(evt));
-
-            // Check add/remove/raise methods
-            var accessor =
-                evt.AddMethod ??
-                evt.RemoveMethod ??
-                evt.RaiseMethod;
-
-            return accessor != null && accessor.IsStatic;
-        }
-
-        public static bool IsAssignableTo(this Type type, Type targetType)
-        {
-            return targetType.IsAssignableFrom(type);
-        }
 
         public static bool IsPublic(this Type type)
         {
@@ -1671,22 +1276,6 @@ namespace Assets._Project.Scripts.UtilScripts.CodeGen
         }
 #endif
 
-
-        public static Type[] RealGetGenericArguments(this Type type)
-        {
-            while (type.HasElementType)
-            {
-                type = type.GetElementType()!;
-            }
-            return type.GetGenericArguments();
-        }
-
-
-
-        public static bool CanNotBeUsedAsGenericParameter(this Type type)
-        {
-            return type.IsPointer || type.IsByRef || type.IsByRefLike;
-        }
 
 
 
@@ -1755,42 +1344,7 @@ namespace Assets._Project.Scripts.UtilScripts.CodeGen
 
 
 
-        public static string CleanAssemblyQualifiedName(this Type type)
-        {
-            if (type == null) return null;
 
-            var assemblyTypeName = type.AssemblyQualifiedName;
-            if (string.IsNullOrEmpty(assemblyTypeName)) return assemblyTypeName;
-
-            // Remove Version=..., Culture=..., PublicKeyToken=... tokens (case-insensitive)
-            assemblyTypeName = Regex.Replace(assemblyTypeName, @",\s*Version=[^,\]]*", "", RegexOptions.IgnoreCase);
-            assemblyTypeName = Regex.Replace(assemblyTypeName, @",\s*Culture=[^,\]]*", "", RegexOptions.IgnoreCase);
-            assemblyTypeName = Regex.Replace(assemblyTypeName, @",\s*PublicKeyToken=[^,\]]*", "", RegexOptions.IgnoreCase);
-
-            // Collapse any accidental double-commas produced by removals (", ,") into a single ","
-            assemblyTypeName = Regex.Replace(assemblyTypeName, @",\s*,\s*", ", ");
-
-            return assemblyTypeName;
-        }
-
-
-
-        public static string QualifiedName(this Type type)
-        {
-            if (type == null) return null;
-
-            var name = type.Name;
-
-            var declaringType = type.DeclaringType;
-
-            while (declaringType != null)
-            {
-                name = declaringType.Name + "+" + name;
-                declaringType = declaringType.DeclaringType;
-            }
-
-            return name;
-        }
     }
 
 

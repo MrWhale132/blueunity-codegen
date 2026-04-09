@@ -1,303 +1,303 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Reflection;
-using UnityEngine;
-using Assembly = System.Reflection.Assembly;
+﻿//using System;
+//using System.Collections.Generic;
+//using System.IO;
+//using System.Linq;
+//using System.Reflection;
+//using UnityEngine;
+//using Assembly = System.Reflection.Assembly;
 
-#if UNITY_EDITOR
-using UnityEditor;
-using UnityEditor.Compilation;
-#endif
-
-
-public static class AssemblyResolver
-{
-#if UNITY_EDITOR
+//#if UNITY_EDITOR
+//using UnityEditor;
+//using UnityEditor.Compilation;
+//#endif
 
 
-    public static HashSet<string> GetAsmdefReferences(System.Reflection.Assembly targetAssembly)
-    {
-        var result = new HashSet<string>();
-
-        var unityAssemblies = CompilationPipeline.GetAssemblies();
-
-        var target = unityAssemblies.FirstOrDefault(a =>
-            a.name == targetAssembly.GetName().Name);
-
-        if (target == null)
-            return result;
-
-        foreach (var reference in target.assemblyReferences)
-        {
-            var name = reference.name;
-            result.Add(name);
-        }
-
-        return result;
-    }
+//public static class AssemblyResolver
+//{
+//#if UNITY_EDITOR
 
 
+//    public static HashSet<string> GetAsmdefReferences(System.Reflection.Assembly targetAssembly)
+//    {
+//        var result = new HashSet<string>();
+
+//        var unityAssemblies = CompilationPipeline.GetAssemblies();
+
+//        var target = unityAssemblies.FirstOrDefault(a =>
+//            a.name == targetAssembly.GetName().Name);
+
+//        if (target == null)
+//            return result;
+
+//        foreach (var reference in target.assemblyReferences)
+//        {
+//            var name = reference.name;
+//            result.Add(name);
+//        }
+
+//        return result;
+//    }
 
 
-    /// <summary>
-    /// Resolves which assembly a given C# file belongs to.
-    /// </summary>
-    /// <param name="csFilePath">Absolute path to a .cs file</param>
-    /// <returns>Name of the assembly (e.g. "Assembly-CSharp")</returns>
-    public static string ResolveAssembly(string csFilePath)
-    {
-        //doesnt work somewhy
-        //string assemblyName = CompilationPipeline.GetAssemblyNameFromScriptPath(csFilePath);
-
-        //if (string.IsNullOrEmpty(assemblyName))
-        //{
-        //    return "Assembly-CSharp";
-        //}
-        //else
-        //{
-        //    return assemblyName;
-        //}
 
 
-        if (!File.Exists(csFilePath) || Path.GetExtension(csFilePath) != ".cs")
-        {
-            Debug.LogError($"Not a valid C# file: {csFilePath}");
-            return null;
-        }
+//    /// <summary>
+//    /// Resolves which assembly a given C# file belongs to.
+//    /// </summary>
+//    /// <param name="csFilePath">Absolute path to a .cs file</param>
+//    /// <returns>Name of the assembly (e.g. "Assembly-CSharp")</returns>
+//    public static string ResolveAssembly(string csFilePath)
+//    {
+//        //doesnt work somewhy
+//        //string assemblyName = CompilationPipeline.GetAssemblyNameFromScriptPath(csFilePath);
 
-        string projectRoot = Directory.GetParent(Application.dataPath).FullName;
-        var dir = Path.GetDirectoryName(csFilePath);
+//        //if (string.IsNullOrEmpty(assemblyName))
+//        //{
+//        //    return "Assembly-CSharp";
+//        //}
+//        //else
+//        //{
+//        //    return assemblyName;
+//        //}
 
-        while (!string.IsNullOrEmpty(dir) && dir.StartsWith(projectRoot))
-        {
-            // 1. Check for .asmdef
-            var asmdefFiles = Directory.GetFiles(dir, "*.asmdef", SearchOption.TopDirectoryOnly);
 
-            if (asmdefFiles.Length > 1)
-            {
-                Debug.LogError($"Multiple .asmdef files found in directory {dir}. Will use the first one.");
-            }
+//        if (!File.Exists(csFilePath) || Path.GetExtension(csFilePath) != ".cs")
+//        {
+//            Debug.LogError($"Not a valid C# file: {csFilePath}");
+//            return null;
+//        }
+
+//        string projectRoot = Directory.GetParent(Application.dataPath).FullName;
+//        var dir = Path.GetDirectoryName(csFilePath);
+
+//        while (!string.IsNullOrEmpty(dir) && dir.StartsWith(projectRoot))
+//        {
+//            // 1. Check for .asmdef
+//            var asmdefFiles = Directory.GetFiles(dir, "*.asmdef", SearchOption.TopDirectoryOnly);
+
+//            if (asmdefFiles.Length > 1)
+//            {
+//                Debug.LogError($"Multiple .asmdef files found in directory {dir}. Will use the first one.");
+//            }
             
-            if (asmdefFiles.Length > 0)
-            {
-                return GetAssemblyNameFromAsmDef(asmdefFiles[0]);
-            }
+//            if (asmdefFiles.Length > 0)
+//            {
+//                return GetAssemblyNameFromAsmDef(asmdefFiles[0]);
+//            }
 
-            // 2. Check for .asmref
-            var asmrefFiles = Directory.GetFiles(dir, "*.asmref", SearchOption.TopDirectoryOnly);
+//            // 2. Check for .asmref
+//            var asmrefFiles = Directory.GetFiles(dir, "*.asmref", SearchOption.TopDirectoryOnly);
 
-            if(asmdefFiles.Length > 1)
-            {
-                Debug.LogError($"Multiple .asmref files found in directory {dir}. Will use the first one.");
-            }
+//            if(asmdefFiles.Length > 1)
+//            {
+//                Debug.LogError($"Multiple .asmref files found in directory {dir}. Will use the first one.");
+//            }
 
-            if (asmrefFiles.Length > 0)
-            {
-                return GetAssemblyNameFromAsmRef(asmrefFiles[0]);
-            }
+//            if (asmrefFiles.Length > 0)
+//            {
+//                return GetAssemblyNameFromAsmRef(asmrefFiles[0]);
+//            }
 
-            // go up
-            dir = Path.GetDirectoryName(dir);
-        }
+//            // go up
+//            dir = Path.GetDirectoryName(dir);
+//        }
 
-        // 3. Fallback → default runtime assembly
-        if (csFilePath.Contains("/Editor/") || csFilePath.Contains("\\Editor\\"))
-            return "Assembly-CSharp-Editor";
-        else
-            return "Assembly-CSharp";
-    }
-
-
-
-
-    public static string GetAssemblyNameFromAsmDef(string filePath)
-    {
-        if (string.IsNullOrEmpty(filePath))
-        {
-
-            Debug.LogError("Asmdef file path is null or empty.");
-            return null;
-        } 
-        if (!File.Exists(filePath))
-        {
-            Debug.LogError($"Asmdef file does not exist: {filePath}");
-            return null;
-        }
+//        // 3. Fallback → default runtime assembly
+//        if (csFilePath.Contains("/Editor/") || csFilePath.Contains("\\Editor\\"))
+//            return "Assembly-CSharp-Editor";
+//        else
+//            return "Assembly-CSharp";
+//    }
 
 
 
-        string asmdefJson = File.ReadAllText(filePath);
-        var asmdefData = JsonUtility.FromJson<AsmDefJson>(asmdefJson);
 
-        return asmdefData.name;
-    }
+//    public static string GetAssemblyNameFromAsmDef(string filePath)
+//    {
+//        if (string.IsNullOrEmpty(filePath))
+//        {
 
-
-    public static string GetAssemblyNameFromAsmRef(string filePath)
-    {
-        //var asmrefFiles = Directory.GetFiles(dir, "*.asmref", SearchOption.TopDirectoryOnly);
-        //if (asmrefFiles.Length == 0)
-        //    return null;
-
-        string json = File.ReadAllText(filePath);
-        var asmrefData = JsonUtility.FromJson<AsmRefJson>(json);
-
-        if (string.IsNullOrEmpty(asmrefData.reference))
-            return null;
-
-        // Check if it's a GUID reference
-        if (asmrefData.reference.StartsWith("GUID:", System.StringComparison.OrdinalIgnoreCase) ||
-            asmrefData.reference.StartsWith("guid:", System.StringComparison.OrdinalIgnoreCase))
-        {
-            string guid = asmrefData.reference.Split(':')[1];
-            string asmdefPath = AssetDatabase.GUIDToAssetPath(guid);
-
-            if (!string.IsNullOrEmpty(asmdefPath))
-            {
-                string asmdefJson = File.ReadAllText(asmdefPath);
-                var asmdefData = JsonUtility.FromJson<AsmDefJson>(asmdefJson);
-                return asmdefData.name;
-            }
-
-            Debug.LogWarning($"Could not resolve asmref GUID {guid}");
-            return null;
-        }
-
-        // Otherwise it’s already the assembly name
-        return asmrefData.reference;
-    }
+//            Debug.LogError("Asmdef file path is null or empty.");
+//            return null;
+//        } 
+//        if (!File.Exists(filePath))
+//        {
+//            Debug.LogError($"Asmdef file does not exist: {filePath}");
+//            return null;
+//        }
 
 
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="directories">project relative paths without leading or trailing dir separators</param>
-    /// <returns></returns>
-    public static IEnumerable<AsdmDefInfo> GetAsdmDefInfosInDirs(params string[] directories)
-    {
-        if (directories == null || directories.Length == 0)
-        {
-            Debug.LogError("No directories provided to scan for asmdef files. Returning empty array.");
-            return Array.Empty<AsdmDefInfo>();
-        }
 
-        List<AsdmDefInfo> result = new();
+//        string asmdefJson = File.ReadAllText(filePath);
+//        var asmdefData = JsonUtility.FromJson<AsmDefJson>(asmdefJson);
 
-        foreach (string dir in directories)
-        {
-            if (string.IsNullOrEmpty(dir))
-            {
+//        return asmdefData.name;
+//    }
 
-                Debug.LogWarning("Empty directory path provided. Skipping.");
-                continue;
-            }
 
-            var projectRoot = Directory.GetParent(Application.dataPath).FullName;
-            var fullDirPath = Path.Combine(projectRoot, dir);
+//    public static string GetAssemblyNameFromAsmRef(string filePath)
+//    {
+//        //var asmrefFiles = Directory.GetFiles(dir, "*.asmref", SearchOption.TopDirectoryOnly);
+//        //if (asmrefFiles.Length == 0)
+//        //    return null;
 
-            if (!Directory.Exists(fullDirPath))
-            {
-                Debug.LogWarning($"Directory does not exist: {fullDirPath}. Skipping.");
-                continue;
-            }
+//        string json = File.ReadAllText(filePath);
+//        var asmrefData = JsonUtility.FromJson<AsmRefJson>(json);
+
+//        if (string.IsNullOrEmpty(asmrefData.reference))
+//            return null;
+
+//        // Check if it's a GUID reference
+//        if (asmrefData.reference.StartsWith("GUID:", System.StringComparison.OrdinalIgnoreCase) ||
+//            asmrefData.reference.StartsWith("guid:", System.StringComparison.OrdinalIgnoreCase))
+//        {
+//            string guid = asmrefData.reference.Split(':')[1];
+//            string asmdefPath = AssetDatabase.GUIDToAssetPath(guid);
+
+//            if (!string.IsNullOrEmpty(asmdefPath))
+//            {
+//                string asmdefJson = File.ReadAllText(asmdefPath);
+//                var asmdefData = JsonUtility.FromJson<AsmDefJson>(asmdefJson);
+//                return asmdefData.name;
+//            }
+
+//            Debug.LogWarning($"Could not resolve asmref GUID {guid}");
+//            return null;
+//        }
+
+//        // Otherwise it’s already the assembly name
+//        return asmrefData.reference;
+//    }
+
+
+//    /// <summary>
+//    /// 
+//    /// </summary>
+//    /// <param name="directories">project relative paths without leading or trailing dir separators</param>
+//    /// <returns></returns>
+//    public static IEnumerable<AsdmDefInfo> GetAsdmDefInfosInDirs(params string[] directories)
+//    {
+//        if (directories == null || directories.Length == 0)
+//        {
+//            Debug.LogError("No directories provided to scan for asmdef files. Returning empty array.");
+//            return Array.Empty<AsdmDefInfo>();
+//        }
+
+//        List<AsdmDefInfo> result = new();
+
+//        foreach (string dir in directories)
+//        {
+//            if (string.IsNullOrEmpty(dir))
+//            {
+
+//                Debug.LogWarning("Empty directory path provided. Skipping.");
+//                continue;
+//            }
+
+//            var projectRoot = Directory.GetParent(Application.dataPath).FullName;
+//            var fullDirPath = Path.Combine(projectRoot, dir);
+
+//            if (!Directory.Exists(fullDirPath))
+//            {
+//                Debug.LogWarning($"Directory does not exist: {fullDirPath}. Skipping.");
+//                continue;
+//            }
             
-            var asmRefPaths = Directory.GetFiles(fullDirPath, "*.asmref", SearchOption.AllDirectories);
+//            var asmRefPaths = Directory.GetFiles(fullDirPath, "*.asmref", SearchOption.AllDirectories);
 
-            var byName = new Dictionary<string, List<string>>();
+//            var byName = new Dictionary<string, List<string>>();
 
-            foreach (var path in asmRefPaths)
-            {
-                var assemblyName = GetAssemblyNameFromAsmRef(path);
+//            foreach (var path in asmRefPaths)
+//            {
+//                var assemblyName = GetAssemblyNameFromAsmRef(path);
 
-                if (string.IsNullOrEmpty(assemblyName))
-                    continue;
+//                if (string.IsNullOrEmpty(assemblyName))
+//                    continue;
 
-                if (!byName.ContainsKey(assemblyName))
-                {
-                    byName[assemblyName] = new List<string>();
-                }
+//                if (!byName.ContainsKey(assemblyName))
+//                {
+//                    byName[assemblyName] = new List<string>();
+//                }
 
-                byName[assemblyName].Add(Path.GetDirectoryName(path));
-            }
-
-
-
-            var asmDefPaths = Directory.GetFiles(fullDirPath, "*.asmdef", SearchOption.AllDirectories);
-
-            foreach (var path in asmDefPaths)
-            {
-                string asmdefJson = File.ReadAllText(path);
-                var asmdefData = JsonUtility.FromJson<AsmDefJson>(asmdefJson);
-
-                var asmDefInfo = new AsdmDefInfo
-                {
-                    assemblyName = asmdefData.name,
-                    directory = Path.GetDirectoryName(path)
-                };
-
-                if (byName.TryGetValue(asmdefData.name, out var asmRefDirs))
-                {
-                    asmDefInfo.asdmRefDirectories = asmRefDirs;
-                }
-
-                result.Add(asmDefInfo);
-            }
-        }
-
-        return result;
-    }
+//                byName[assemblyName].Add(Path.GetDirectoryName(path));
+//            }
 
 
 
+//            var asmDefPaths = Directory.GetFiles(fullDirPath, "*.asmdef", SearchOption.AllDirectories);
+
+//            foreach (var path in asmDefPaths)
+//            {
+//                string asmdefJson = File.ReadAllText(path);
+//                var asmdefData = JsonUtility.FromJson<AsmDefJson>(asmdefJson);
+
+//                var asmDefInfo = new AsdmDefInfo
+//                {
+//                    assemblyName = asmdefData.name,
+//                    directory = Path.GetDirectoryName(path)
+//                };
+
+//                if (byName.TryGetValue(asmdefData.name, out var asmRefDirs))
+//                {
+//                    asmDefInfo.asdmRefDirectories = asmRefDirs;
+//                }
+
+//                result.Add(asmDefInfo);
+//            }
+//        }
+
+//        return result;
+//    }
 
 
-    public static string[] EditableSourceFilesDirs = new string[] { "Assets", "Packages" };
 
-    public static AsdmDefInfo GetAsdmDefInfoInDirs(Assembly assembly)
-    {
-        return GetAsdmDefInfoInDirs(assembly, EditableSourceFilesDirs);
-    }
-    public static AsdmDefInfo GetAsdmDefInfoInDirs(Assembly assembly, params string[] directories)
-    {
-        var infos = GetAsdmDefInfosInDirs(directories);
+
+
+//    public static string[] EditableSourceFilesDirs = new string[] { "Assets", "Packages" };
+
+//    public static AsdmDefInfo GetAsdmDefInfoInDirs(Assembly assembly)
+//    {
+//        return GetAsdmDefInfoInDirs(assembly, EditableSourceFilesDirs);
+//    }
+//    public static AsdmDefInfo GetAsdmDefInfoInDirs(Assembly assembly, params string[] directories)
+//    {
+//        var infos = GetAsdmDefInfosInDirs(directories);
         
-        var info = infos.FirstOrDefault(i => i.assemblyName == assembly.GetName().Name);
+//        var info = infos.FirstOrDefault(i => i.assemblyName == assembly.GetName().Name);
 
-        return info;
-    }
-
-
-    #endif
+//        return info;
+//    }
 
 
-    public class AsdmDefInfo
-    {
-        public string assemblyName;
-        public string directory;
-        public List<string> asdmRefDirectories = new();
-
-        public IEnumerable<string> OwnedDirectories {
-            get
-            {
-                yield return directory;
-                foreach (var dir in asdmRefDirectories)
-                    yield return dir;
-            }
-        }
-    }
+//    #endif
 
 
-    [System.Serializable]
-    public class AsmDefJson
-    {
-        public string name;
-    }
+//    public class AsdmDefInfo
+//    {
+//        public string assemblyName;
+//        public string directory;
+//        public List<string> asdmRefDirectories = new();
 
-    [System.Serializable]
-    private class AsmRefJson
-    {
-        public string reference;
-    }
-}
+//        public IEnumerable<string> OwnedDirectories {
+//            get
+//            {
+//                yield return directory;
+//                foreach (var dir in asdmRefDirectories)
+//                    yield return dir;
+//            }
+//        }
+//    }
+
+
+//    [System.Serializable]
+//    public class AsmDefJson
+//    {
+//        public string name;
+//    }
+
+//    [System.Serializable]
+//    private class AsmRefJson
+//    {
+//        public string reference;
+//    }
+//}

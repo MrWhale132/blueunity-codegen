@@ -1,8 +1,14 @@
 {
-    "name": "CodeGenUtils",
-    "rootNamespace": "",
-    "references": [],
-    "includePlatforms": [],
+    "name": "Theblueway.CodeGen.Editor",
+    "rootNamespace": "Theblueway.CodeGen.Editor",
+    "references": [
+        "GUID:868b241af02c2d64d888ee6d2df251d9",
+        "GUID:11f9f0384cd82b14ea5d004a22a3f210",
+        "GUID:cd97fd02002596344a8d97748ded4ec6"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
     "overrideReferences": false,

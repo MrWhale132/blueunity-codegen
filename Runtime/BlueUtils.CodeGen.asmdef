@@ -1,0 +1,16 @@
+{
+    "name": "Theblueway.CodeGen",
+    "rootNamespace": "Theblueway.CodeGen.Runtime",
+    "references": [
+        "GUID:11f9f0384cd82b14ea5d004a22a3f210"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
