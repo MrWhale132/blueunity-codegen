@@ -1,6 +1,9 @@
 {
   "name": "com.theblueway.codegen",
   "version": "1.0.0",
-  "displayName": "BlueUtils CodeGen",
+  "displayName": "Blue CodeGen",
+    "dependencies": {
+        "com.theblueway.core": "1.1.0"
+    },
   "_fingerprint": "e0f6e17b5a497ddb12cd31087b125fffbf875b0a"
 }
